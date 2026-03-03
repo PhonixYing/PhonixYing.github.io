@@ -55,6 +55,8 @@ function initWx({ corpId, agentId, timestamp, nonceStr, corpSignature, agentSign
   return new Promise((resolve, reject) => {
     if (!window.wx) return reject(new Error("wx is not loaded"));
 
+    const MEETING_APIS = ["createMeeting", "joinMeeting"];
+
     // Corp-level config
     wx.config({
       beta: true,
@@ -67,6 +69,9 @@ function initWx({ corpId, agentId, timestamp, nonceStr, corpSignature, agentSign
         // Put the APIs you will use here. Signature is not impacted, but permission checks are.
         "checkJsApi",
         "agentConfig",
+        // Some JSAPIs also require being declared at corp-level; keeping them in both lists avoids
+        // "permission denied" caused by missing jsApiList declarations.
+        ...MEETING_APIS,
       ],
     });
 
@@ -87,11 +92,15 @@ function initWx({ corpId, agentId, timestamp, nonceStr, corpSignature, agentSign
         signature: agentSignature,
         jsApiList: [
           // Meeting APIs are expected here; adjust names/params according to the official doc you linked.
-          "createMeeting",
-          "joinMeeting",
+          ...MEETING_APIS,
         ],
         success: () => {
           log("[wx.agentConfig success]");
+          wx.checkJsApi({
+            jsApiList: MEETING_APIS,
+            success: (res) => log("[checkJsApi]", res),
+            fail: (err) => log("[checkJsApi fail]", err),
+          });
           resolve();
         },
         fail: (err) => {
@@ -107,8 +116,8 @@ function wxInvoke(name, params) {
   return new Promise((resolve, reject) => {
     wx.invoke(name, params, (res) => {
       // WeCom JS-SDK usually returns {err_msg: "...:ok"} on success.
-      const msg = res?.err_msg || "";
-      if (msg.endsWith(":ok")) return resolve(res);
+      const msg = res?.err_msg || res?.errMsg || "";
+      if (msg.endsWith(":ok") || msg.endsWith(":OK")) return resolve(res);
       reject(res);
     });
   });
