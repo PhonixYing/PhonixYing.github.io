@@ -29,9 +29,25 @@ function apiUrl(path) {
 
 async function fetchJssdkConfig() {
   const pageUrl = window.location.href.split("#")[0];
-  const res = await fetch(apiUrl(`/api/jssdk-config?url=${encodeURIComponent(pageUrl)}`));
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || "jssdk-config failed");
+  const full = apiUrl(`/api/jssdk-config?url=${encodeURIComponent(pageUrl)}`);
+  log("[init] apiBase =", API_BASE || "(empty)");
+  log("[init] request =", full);
+
+  let res;
+  try {
+    res = await fetch(full, { method: "GET" });
+  } catch (e) {
+    throw new Error(`fetch failed: ${String(e?.message || e)}`);
+  }
+
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`non-json response (status=${res.status}): ${text.slice(0, 200)}`);
+  }
+  if (!res.ok || !json.ok) throw new Error(json.error || `http status=${res.status}`);
   return json;
 }
 
@@ -156,13 +172,13 @@ async function doJoinMeeting() {
 }
 
 $("#btnInit").addEventListener("click", () => {
-  doInit().catch(() => {});
+  doInit().catch((e) => log("[init] fail", String(e?.message || e)));
 });
 $("#btnCreate").addEventListener("click", () => {
-  doCreateMeeting().catch(() => {});
+  doCreateMeeting().catch((e) => log("[createMeeting] exception", e));
 });
 $("#btnJoin").addEventListener("click", () => {
-  doJoinMeeting().catch(() => {});
+  doJoinMeeting().catch((e) => log("[joinMeeting] exception", e));
 });
 
 log("页面已加载。请在企业微信内打开，然后点击「初始化 JS-SDK」。");
