@@ -1,10 +1,18 @@
 const $ = (sel) => document.querySelector(sel);
 
 const logEl = $("#log");
+function formatForLog(v) {
+  if (typeof v === "string") return v;
+  if (v instanceof Error) return `${v.name}: ${v.message}`;
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
+}
+
 function log(...args) {
-  const s = args
-    .map((a) => (typeof a === "string" ? a : JSON.stringify(a, null, 2)))
-    .join(" ");
+  const s = args.map((a) => formatForLog(a)).join(" ");
   logEl.textContent += `${new Date().toLocaleTimeString()} ${s}\n`;
 }
 
@@ -68,7 +76,42 @@ function normalizeMeetingCode(input) {
 // Provide it via querystring: ?apiBase=https://YOUR_BACKEND_DOMAIN
 // Or set window.__API_BASE__ in index.html before loading main.js.
 const apiBaseFromQuery = new URLSearchParams(window.location.search).get("apiBase") || "";
+const userIdFromQuery = new URLSearchParams(window.location.search).get("userId") || "";
 const API_BASE = apiBaseFromQuery || window.__API_BASE__ || "";
+const USER_ID_STORAGE_KEY = "wecom_demo_user_id";
+
+function readSavedUserId() {
+  try {
+    return localStorage.getItem(USER_ID_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveUserId(v) {
+  try {
+    if (v) localStorage.setItem(USER_ID_STORAGE_KEY, v);
+    else localStorage.removeItem(USER_ID_STORAGE_KEY);
+  } catch {
+    // ignore storage errors in private mode
+  }
+}
+
+function getManualUserId() {
+  return ($("#userId")?.value || "").trim();
+}
+
+function setupUserIdInput() {
+  const input = $("#userId");
+  if (!input) return;
+  const initial = userIdFromQuery || window.__WECOM_USER_ID__ || readSavedUserId();
+  if (initial) input.value = String(initial).trim();
+  input.addEventListener("change", () => {
+    const v = input.value.trim();
+    saveUserId(v);
+    log("[userId] updated", v ? { userId: v } : "(empty)");
+  });
+}
 
 function apiUrl(path) {
   if (!API_BASE) return path;
@@ -311,8 +354,20 @@ async function getCurrentUserId() {
   }
 
   log("[getContext] success", res);
-  const userId = res?.userid || res?.userId || "";
-  if (!userId) throw new Error("getContext returned empty userid");
+  const userId =
+    res?.userid ||
+    res?.userId ||
+    res?.open_userid ||
+    res?.openUserid ||
+    getManualUserId() ||
+    userIdFromQuery ||
+    window.__WECOM_USER_ID__ ||
+    readSavedUserId() ||
+    "";
+  if (!userId) {
+    throw new Error("getContext 未返回 userid。请填写页面里的「企业微信 userId」，或在 URL 上加 ?userId=xxx。");
+  }
+  saveUserId(String(userId));
   return String(userId);
 }
 
@@ -422,4 +477,5 @@ $("#btnJoin").addEventListener("click", () => {
   doJoinMeeting().catch((e) => log("[startMeeting/join] exception", e));
 });
 
+setupUserIdInput();
 log("页面已加载。请在企业微信内打开，然后点击「初始化 JS-SDK」。");
