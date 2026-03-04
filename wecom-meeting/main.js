@@ -60,6 +60,10 @@ function isLikelyMeetingCode(input) {
   return /^\d{3}-?\d{3}-?\d{3}$/.test(String(input || ""));
 }
 
+function normalizeMeetingCode(input) {
+  return String(input || "").replace(/\D+/g, "");
+}
+
 // If you host the frontend on GitHub Pages, you MUST set an HTTPS backend for signatures.
 // Provide it via querystring: ?apiBase=https://YOUR_BACKEND_DOMAIN
 // Or set window.__API_BASE__ in index.html before loading main.js.
@@ -71,19 +75,13 @@ function apiUrl(path) {
   return `${API_BASE.replace(/\/+$/, "")}${path}`;
 }
 
-async function fetchJssdkConfig() {
-  const pageUrl = window.location.href.split("#")[0];
-  const full = apiUrl(`/api/jssdk-config?url=${encodeURIComponent(pageUrl)}`);
-  log("[init] apiBase =", API_BASE || "(empty)");
-  log("[init] request =", full);
-
+async function fetchJson(url) {
   let res;
   try {
-    res = await fetch(full, { method: "GET" });
+    res = await fetch(url, { method: "GET" });
   } catch (e) {
     throw new Error(`fetch failed: ${String(e?.message || e)}`);
   }
-
   const text = await res.text();
   let json;
   try {
@@ -95,12 +93,20 @@ async function fetchJssdkConfig() {
   return json;
 }
 
+async function fetchJssdkConfig() {
+  const pageUrl = window.location.href.split("#")[0];
+  const full = apiUrl(`/api/jssdk-config?url=${encodeURIComponent(pageUrl)}`);
+  log("[init] apiBase =", API_BASE || "(empty)");
+  log("[init] request =", full);
+  return fetchJson(full);
+}
+
 function initWx({ corpId, agentId, timestamp, nonceStr, corpSignature, agentSignature }) {
   return new Promise((resolve, reject) => {
     const sdk = getSdk();
     if (!sdk) return reject(new Error("WeCom JS-SDK is not loaded"));
 
-    const MEETING_APIS = ["startMeeting"];
+    const MEETING_APIS = ["startMeeting", "getContext"];
 
     if (typeof sdk.register === "function") {
       try {
@@ -281,6 +287,51 @@ function startMeeting(params, action = "startMeeting") {
   });
 }
 
+async function getCurrentUserId() {
+  const sdk = getSdk();
+  if (!sdk || typeof sdk.getContext !== "function") {
+    throw new Error("Current SDK does not support getContext()");
+  }
+
+  let res;
+  try {
+    const maybePromise = sdk.getContext();
+    if (maybePromise && typeof maybePromise.then === "function") {
+      res = await maybePromise;
+    } else {
+      res = await new Promise((resolve, reject) => {
+        sdk.getContext({
+          success: resolve,
+          fail: reject,
+        });
+      });
+    }
+  } catch (err) {
+    throw new Error(`getContext failed: ${String(err?.errMsg || err?.errmsg || err?.message || err)}`);
+  }
+
+  log("[getContext] success", res);
+  const userId = res?.userid || res?.userId || "";
+  if (!userId) throw new Error("getContext returned empty userid");
+  return String(userId);
+}
+
+async function resolveMeetingIdByCode(meetingCodeRaw) {
+  const meetingCode = normalizeMeetingCode(meetingCodeRaw);
+  if (meetingCode.length !== 9) {
+    throw new Error("meetingCode must be 9 digits");
+  }
+
+  const userId = await getCurrentUserId();
+  const full = apiUrl(
+    `/api/meeting/resolve-id?meetingCode=${encodeURIComponent(meetingCode)}&userId=${encodeURIComponent(userId)}`,
+  );
+  log("[resolveMeetingId] request", { full, meetingCode, userId });
+  const json = await fetchJson(full);
+  log("[resolveMeetingId] success", json);
+  return json.meetingId || "";
+}
+
 let inited = false;
 
 async function doInit() {
@@ -316,7 +367,7 @@ async function doCreateMeeting() {
       log("[startMeeting/create] filled meetingId", { meetingId: maybeId });
     } else {
       log("[startMeeting/create] payload keys", Object.keys(res || {}));
-      log("[startMeeting/create] no meetingId in response payload; 请在会议界面手动复制，或通过服务端「创建预约会议」接口获取。");
+      log("[startMeeting/create] no meetingId in response payload; 可粘贴9位会议号，页面会尝试通过后端自动解析 meetingId。");
     }
   } catch (err) {
     log("[startMeeting/create] fail", err);
@@ -328,7 +379,7 @@ async function doJoinMeeting() {
   if (!inited) await doInit();
 
   const rawValue = $("#meetingId").value.trim();
-  const meetingId = cleanMeetingInput(rawValue);
+  let meetingId = cleanMeetingInput(rawValue);
   $("#meetingId").value = meetingId;
 
   if (!meetingId) {
@@ -337,11 +388,19 @@ async function doJoinMeeting() {
   }
 
   if (isLikelyMeetingCode(meetingId)) {
-    log("[startMeeting/join] 当前输入看起来是9位会议号（meeting_code），不是 meetingId。请改用会议ID（通常来自服务端创建会议接口返回）。");
-    return;
+    log("[startMeeting/join] 检测到会议号（meeting_code），尝试通过后端解析 meetingId...");
+    try {
+      meetingId = await resolveMeetingIdByCode(meetingId);
+      if (!meetingId) throw new Error("resolve-id returned empty meetingId");
+      $("#meetingId").value = meetingId;
+      log("[startMeeting/join] resolved meetingId", { meetingId });
+    } catch (err) {
+      log("[startMeeting/join] 无法将会议号转换为 meetingId", err);
+      return;
+    }
   }
 
-  const params = meetingId ? { meetingId } : {};
+  const params = { meetingId };
 
   log("[startMeeting/join] invoking...", params);
   try {
