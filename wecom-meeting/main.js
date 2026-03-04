@@ -21,6 +21,34 @@ function getSdk() {
   return window.ww || window.wx || null;
 }
 
+function extractMeetingId(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  const targetKeys = new Set(["meetingid", "meeting_id", "meetingcode", "meeting_code"]);
+  const visited = new Set();
+  const stack = [payload];
+
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    if (visited.has(node)) continue;
+    visited.add(node);
+
+    for (const [key, value] of Object.entries(node)) {
+      const normalizedKey = String(key).toLowerCase();
+      if (targetKeys.has(normalizedKey)) {
+        if (value !== undefined && value !== null && String(value).trim()) {
+          return String(value).trim();
+        }
+      }
+
+      if (value && typeof value === "object") {
+        stack.push(value);
+      }
+    }
+  }
+  return "";
+}
+
 // If you host the frontend on GitHub Pages, you MUST set an HTTPS backend for signatures.
 // Provide it via querystring: ?apiBase=https://YOUR_BACKEND_DOMAIN
 // Or set window.__API_BASE__ in index.html before loading main.js.
@@ -188,34 +216,53 @@ function initWx({ corpId, agentId, timestamp, nonceStr, corpSignature, agentSign
 }
 
 function startMeeting(params = {}, action = "startMeeting") {
-  return new Promise((resolve, reject) => {
-    const sdk = getSdk();
-    if (!sdk) return reject(new Error("WeCom JS-SDK is not loaded"));
-    if (typeof sdk.startMeeting !== "function") {
-      return reject(new Error("Current SDK does not support startMeeting()"));
+  const sdk = getSdk();
+  if (!sdk) return Promise.reject(new Error("WeCom JS-SDK is not loaded"));
+  if (typeof sdk.startMeeting !== "function") {
+    return Promise.reject(new Error("Current SDK does not support startMeeting()"));
+  }
+
+  // Follow latest docs first: Promise return with meetingId.
+  try {
+    const maybePromise = sdk.startMeeting(params);
+    if (maybePromise && typeof maybePromise.then === "function") {
+      return maybePromise
+        .then((res) => {
+          log(`[${action}] promise success`, res);
+          return res || {};
+        })
+        .catch((err) => {
+          log(`[${action}] promise fail`, err);
+          throw err;
+        });
     }
+  } catch (err) {
+    log(`[${action}] invoke throw`, err);
+    return Promise.reject(err);
+  }
 
-    const options = {
-      ...params,
-      success: (res) => {
-        log(`[${action}] callback success`, res);
-        resolve(res || {});
-      },
-      fail: (err) => {
-        log(`[${action}] callback fail`, err);
-        reject(err || new Error("startMeeting failed"));
-      },
-      cancel: (res) => {
-        log(`[${action}] callback cancel`, res);
-        reject(res || new Error("startMeeting canceled"));
-      },
-      complete: (res) => {
-        log(`[${action}] callback complete`, res);
-      },
-    };
-
+  // Fallback for old callback-only behaviors.
+  return new Promise((resolve, reject) => {
+    log(`[${action}] fallback to callback mode`);
     try {
-      sdk.startMeeting(options);
+      sdk.startMeeting({
+        ...params,
+        success: (res) => {
+          log(`[${action}] callback success`, res);
+          resolve(res || {});
+        },
+        fail: (err) => {
+          log(`[${action}] callback fail`, err);
+          reject(err || new Error("startMeeting failed"));
+        },
+        cancel: (res) => {
+          log(`[${action}] callback cancel`, res);
+          reject(res || new Error("startMeeting canceled"));
+        },
+        complete: (res) => {
+          log(`[${action}] callback complete`, res);
+        },
+      });
     } catch (err) {
       reject(err);
     }
@@ -251,8 +298,14 @@ async function doCreateMeeting() {
     const res = await startMeeting(params, "startMeeting/create");
     log("[startMeeting/create] success", res);
 
-    const maybeId = res.meetingId || res.meeting_id || "";
-    if (maybeId) $("#meetingId").value = String(maybeId);
+    const maybeId = extractMeetingId(res);
+    if (maybeId) {
+      $("#meetingId").value = maybeId;
+      log("[startMeeting/create] filled meetingId", { meetingId: maybeId });
+    } else {
+      log("[startMeeting/create] payload keys", Object.keys(res || {}));
+      log("[startMeeting/create] no meetingId in response payload; 请在会议界面手动复制，或通过服务端「创建预约会议」接口获取。");
+    }
   } catch (err) {
     log("[startMeeting/create] fail", err);
     throw err;
