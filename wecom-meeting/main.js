@@ -49,6 +49,17 @@ function extractMeetingId(payload) {
   return "";
 }
 
+function cleanMeetingInput(raw) {
+  return String(raw || "")
+    .replace(/^#?\s*企业微信会议[:：]\s*/i, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function isLikelyMeetingCode(input) {
+  return /^\d{3}-?\d{3}-?\d{3}$/.test(String(input || ""));
+}
+
 // If you host the frontend on GitHub Pages, you MUST set an HTTPS backend for signatures.
 // Provide it via querystring: ?apiBase=https://YOUR_BACKEND_DOMAIN
 // Or set window.__API_BASE__ in index.html before loading main.js.
@@ -316,7 +327,20 @@ async function doCreateMeeting() {
 async function doJoinMeeting() {
   if (!inited) await doInit();
 
-  const meetingId = $("#meetingId").value.trim();
+  const rawValue = $("#meetingId").value.trim();
+  const meetingId = cleanMeetingInput(rawValue);
+  $("#meetingId").value = meetingId;
+
+  if (!meetingId) {
+    log("[startMeeting/join] 请输入 meetingId。");
+    return;
+  }
+
+  if (isLikelyMeetingCode(meetingId)) {
+    log("[startMeeting/join] 当前输入看起来是9位会议号（meeting_code），不是 meetingId。请改用会议ID（通常来自服务端创建会议接口返回）。");
+    return;
+  }
+
   const params = meetingId ? { meetingId } : {};
 
   log("[startMeeting/join] invoking...", params);
