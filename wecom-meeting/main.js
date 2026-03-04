@@ -16,6 +16,11 @@ function assertInWeCom() {
   }
 }
 
+function getSdk() {
+  // New SDK exposes `ww`; keep `wx` fallback for compatibility.
+  return window.ww || window.wx || null;
+}
+
 // If you host the frontend on GitHub Pages, you MUST set an HTTPS backend for signatures.
 // Provide it via querystring: ?apiBase=https://YOUR_BACKEND_DOMAIN
 // Or set window.__API_BASE__ in index.html before loading main.js.
@@ -53,12 +58,21 @@ async function fetchJssdkConfig() {
 
 function initWx({ corpId, agentId, timestamp, nonceStr, corpSignature, agentSignature }) {
   return new Promise((resolve, reject) => {
-    if (!window.wx) return reject(new Error("wx is not loaded"));
+    const sdk = getSdk();
+    if (!sdk) return reject(new Error("WeCom JS-SDK is not loaded"));
+    if (
+      typeof sdk.config !== "function" ||
+      typeof sdk.ready !== "function" ||
+      typeof sdk.error !== "function" ||
+      typeof sdk.agentConfig !== "function"
+    ) {
+      return reject(new Error("Current SDK does not provide config/agentConfig APIs"));
+    }
 
-    const MEETING_APIS = ["createMeeting", "joinMeeting"];
+    const MEETING_APIS = ["startMeeting"];
 
     // Corp-level config
-    wx.config({
+    sdk.config({
       beta: true,
       debug: false,
       appId: corpId,
@@ -75,28 +89,28 @@ function initWx({ corpId, agentId, timestamp, nonceStr, corpSignature, agentSign
       ],
     });
 
-    wx.error((err) => {
-      log("[wx.config error]", err);
+    sdk.error((err) => {
+      log("[sdk.config error]", err);
       reject(err);
     });
 
-    wx.ready(() => {
-      log("[wx.config ready]");
+    sdk.ready(() => {
+      log("[sdk.config ready]");
 
       // Agent-level config (for self-built apps)
-      wx.agentConfig({
+      sdk.agentConfig({
         corpid: corpId,
         agentid: agentId,
         timestamp,
         nonceStr,
         signature: agentSignature,
         jsApiList: [
-          // Meeting APIs are expected here; adjust names/params according to the official doc you linked.
+          // Meeting APIs are expected here.
           ...MEETING_APIS,
         ],
         success: () => {
-          log("[wx.agentConfig success]");
-          wx.checkJsApi({
+          log("[sdk.agentConfig success]");
+          sdk.checkJsApi({
             jsApiList: MEETING_APIS,
             success: (res) => log("[checkJsApi]", res),
             fail: (err) => log("[checkJsApi fail]", err),
@@ -104,7 +118,7 @@ function initWx({ corpId, agentId, timestamp, nonceStr, corpSignature, agentSign
           resolve();
         },
         fail: (err) => {
-          log("[wx.agentConfig fail]", err);
+          log("[sdk.agentConfig fail]", err);
           reject(err);
         },
       });
@@ -112,14 +126,38 @@ function initWx({ corpId, agentId, timestamp, nonceStr, corpSignature, agentSign
   });
 }
 
-function wxInvoke(name, params) {
+function startMeeting(params = {}, action = "startMeeting") {
   return new Promise((resolve, reject) => {
-    wx.invoke(name, params, (res) => {
-      // WeCom JS-SDK usually returns {err_msg: "...:ok"} on success.
-      const msg = res?.err_msg || res?.errMsg || "";
-      if (msg.endsWith(":ok") || msg.endsWith(":OK")) return resolve(res);
-      reject(res);
-    });
+    const sdk = getSdk();
+    if (!sdk) return reject(new Error("WeCom JS-SDK is not loaded"));
+    if (typeof sdk.startMeeting !== "function") {
+      return reject(new Error("Current SDK does not support startMeeting()"));
+    }
+
+    const options = {
+      ...params,
+      success: (res) => {
+        log(`[${action}] callback success`, res);
+        resolve(res || {});
+      },
+      fail: (err) => {
+        log(`[${action}] callback fail`, err);
+        reject(err || new Error("startMeeting failed"));
+      },
+      cancel: (res) => {
+        log(`[${action}] callback cancel`, res);
+        reject(res || new Error("startMeeting canceled"));
+      },
+      complete: (res) => {
+        log(`[${action}] callback complete`, res);
+      },
+    };
+
+    try {
+      sdk.startMeeting(options);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
@@ -145,20 +183,17 @@ async function doInit() {
 async function doCreateMeeting() {
   if (!inited) await doInit();
 
-  // TODO: Adjust params exactly as the official doc (path/93806) requires.
-  // Keep it empty first; many APIs use defaults.
   const params = {};
-  log("[createMeeting] invoking...", params);
+  log("[startMeeting/create] invoking...", params);
 
   try {
-    const res = await wxInvoke("createMeeting", params);
-    log("[createMeeting] success", res);
+    const res = await startMeeting(params, "startMeeting/create");
+    log("[startMeeting/create] success", res);
 
-    // Common patterns: meeting_id / meetingId / meeting_code etc. Fill the input if present.
-    const maybeId = res.meeting_id || res.meetingId || res.meeting_code || res.meetingCode || "";
+    const maybeId = res.meetingId || res.meeting_id || "";
     if (maybeId) $("#meetingId").value = String(maybeId);
   } catch (err) {
-    log("[createMeeting] fail", err);
+    log("[startMeeting/create] fail", err);
     throw err;
   }
 }
@@ -167,15 +202,14 @@ async function doJoinMeeting() {
   if (!inited) await doInit();
 
   const meetingId = $("#meetingId").value.trim();
-  // TODO: Adjust key name per official doc (path/93807).
-  const params = meetingId ? { meeting_id: meetingId } : {};
+  const params = meetingId ? { meetingId } : {};
 
-  log("[joinMeeting] invoking...", params);
+  log("[startMeeting/join] invoking...", params);
   try {
-    const res = await wxInvoke("joinMeeting", params);
-    log("[joinMeeting] success", res);
+    const res = await startMeeting(params, "startMeeting/join");
+    log("[startMeeting/join] success", res);
   } catch (err) {
-    log("[joinMeeting] fail", err);
+    log("[startMeeting/join] fail", err);
     throw err;
   }
 }
@@ -184,10 +218,10 @@ $("#btnInit").addEventListener("click", () => {
   doInit().catch((e) => log("[init] fail", String(e?.message || e)));
 });
 $("#btnCreate").addEventListener("click", () => {
-  doCreateMeeting().catch((e) => log("[createMeeting] exception", e));
+  doCreateMeeting().catch((e) => log("[startMeeting/create] exception", e));
 });
 $("#btnJoin").addEventListener("click", () => {
-  doJoinMeeting().catch((e) => log("[joinMeeting] exception", e));
+  doJoinMeeting().catch((e) => log("[startMeeting/join] exception", e));
 });
 
 log("页面已加载。请在企业微信内打开，然后点击「初始化 JS-SDK」。");

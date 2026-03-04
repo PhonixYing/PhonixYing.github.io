@@ -6,9 +6,8 @@
     <title>企业微信会议 Demo</title>
     <!-- Use relative paths so GitHub Pages (project pages) works under /<repo>/ -->
     <link rel="stylesheet" href="./style.css" />
-    <!-- WeCom JS-SDK: jwxwork (work wechat) + jweixin (wechat base) are commonly both included -->
-    <script src="https://res.wx.qq.com/open/js/jweixin-1.6.0.js"></script>
-    <script src="https://open.work.weixin.qq.com/wwopen/js/jwxwork-1.0.0.js"></script>
+    <!-- WeCom JS-SDK (latest CDN from official docs) -->
+    <script src="https://wwcdn.weixin.qq.com/node/open/js/wecom-jssdk-2.3.4.js"></script>
   </head>
   <body>
     <main class="wrap">
@@ -26,8 +25,8 @@
         </div>
 
         <div class="row">
-          <label for="meetingId">会议参数（创建后自动填）</label>
-          <input id="meetingId" placeholder="meeting_id / meeting_code（按文档填写）" />
+          <label for="meetingId">会议ID（创建后自动填）</label>
+          <input id="meetingId" placeholder="meetingId（按文档填写）" />
         </div>
       </section>
 
