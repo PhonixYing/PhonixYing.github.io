@@ -215,7 +215,7 @@ function initWx({ corpId, agentId, timestamp, nonceStr, corpSignature, agentSign
   });
 }
 
-function startMeeting(params = {}, action = "startMeeting") {
+function startMeeting(params, action = "startMeeting") {
   const sdk = getSdk();
   if (!sdk) return Promise.reject(new Error("WeCom JS-SDK is not loaded"));
   if (typeof sdk.startMeeting !== "function") {
@@ -224,7 +224,7 @@ function startMeeting(params = {}, action = "startMeeting") {
 
   // Follow latest docs first: Promise return with meetingId.
   try {
-    const maybePromise = sdk.startMeeting(params);
+    const maybePromise = params === undefined ? sdk.startMeeting() : sdk.startMeeting(params);
     if (maybePromise && typeof maybePromise.then === "function") {
       return maybePromise
         .then((res) => {
@@ -244,9 +244,10 @@ function startMeeting(params = {}, action = "startMeeting") {
   // Fallback for old callback-only behaviors.
   return new Promise((resolve, reject) => {
     log(`[${action}] fallback to callback mode`);
+    const baseParams = params && typeof params === "object" ? params : {};
     try {
       sdk.startMeeting({
-        ...params,
+        ...baseParams,
         success: (res) => {
           log(`[${action}] callback success`, res);
           resolve(res || {});
@@ -291,8 +292,8 @@ async function doInit() {
 async function doCreateMeeting() {
   if (!inited) await doInit();
 
-  const params = {};
-  log("[startMeeting/create] invoking...", params);
+  const params = undefined;
+  log("[startMeeting/create] invoking without params");
 
   try {
     const res = await startMeeting(params, "startMeeting/create");
