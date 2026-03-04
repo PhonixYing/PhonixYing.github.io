@@ -60,16 +60,77 @@ function initWx({ corpId, agentId, timestamp, nonceStr, corpSignature, agentSign
   return new Promise((resolve, reject) => {
     const sdk = getSdk();
     if (!sdk) return reject(new Error("WeCom JS-SDK is not loaded"));
+
+    const MEETING_APIS = ["startMeeting"];
+
+    if (typeof sdk.register === "function") {
+      try {
+        sdk.register({
+          corpId,
+          agentId,
+          jsApiList: MEETING_APIS,
+          getConfigSignature: async (url) => {
+            log("[sdk.register] getConfigSignature", { url });
+            return {
+              timestamp,
+              nonceStr,
+              signature: corpSignature,
+            };
+          },
+          getAgentConfigSignature: async (url) => {
+            log("[sdk.register] getAgentConfigSignature", { url });
+            return {
+              timestamp,
+              nonceStr,
+              signature: agentSignature,
+            };
+          },
+          onConfigSuccess: (res) => log("[sdk.register] onConfigSuccess", res),
+          onConfigFail: (err) => log("[sdk.register] onConfigFail", err),
+          onConfigComplete: (res) => log("[sdk.register] onConfigComplete", res),
+          onAgentConfigSuccess: (res) => log("[sdk.register] onAgentConfigSuccess", res),
+          onAgentConfigFail: (err) => log("[sdk.register] onAgentConfigFail", err),
+          onAgentConfigComplete: (res) => log("[sdk.register] onAgentConfigComplete", res),
+        });
+      } catch (err) {
+        return reject(err);
+      }
+
+      const readyPromise =
+        typeof sdk.ensureAgentConfigReady === "function"
+          ? sdk.ensureAgentConfigReady()
+          : typeof sdk.ensureConfigReady === "function"
+            ? sdk.ensureConfigReady()
+            : Promise.resolve();
+
+      Promise.resolve(readyPromise)
+        .then(() => {
+          log("[sdk.register] ready");
+          if (typeof sdk.checkJsApi === "function") {
+            sdk.checkJsApi({
+              jsApiList: MEETING_APIS,
+              success: (res) => log("[checkJsApi]", res),
+              fail: (err) => log("[checkJsApi fail]", err),
+              complete: (res) => log("[checkJsApi complete]", res),
+            });
+          }
+          resolve();
+        })
+        .catch((err) => {
+          log("[sdk.register] ready fail", err);
+          reject(err);
+        });
+      return;
+    }
+
     if (
       typeof sdk.config !== "function" ||
       typeof sdk.ready !== "function" ||
       typeof sdk.error !== "function" ||
       typeof sdk.agentConfig !== "function"
     ) {
-      return reject(new Error("Current SDK does not provide config/agentConfig APIs"));
+      return reject(new Error("Current SDK does not provide register or config/agentConfig APIs"));
     }
-
-    const MEETING_APIS = ["startMeeting"];
 
     // Corp-level config
     sdk.config({
