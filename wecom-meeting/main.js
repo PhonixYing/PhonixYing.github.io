@@ -101,6 +101,44 @@ function getManualUserId() {
   return ($("#userId")?.value || "").trim();
 }
 
+function showMeetingIdModal(meetingId, meetingCode) {
+  const modal = $("#meetingIdModal");
+  const result = $("#meetingIdResult");
+  if (!modal || !result) return;
+  result.textContent = `meetingCode: ${meetingCode}\nmeetingId: ${meetingId}`;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function hideMeetingIdModal() {
+  const modal = $("#meetingIdModal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+async function copyMeetingIdFromModal() {
+  const result = $("#meetingIdResult")?.textContent || "";
+  const matched = result.match(/meetingId:\s*(.+)$/m);
+  const meetingId = (matched?.[1] || "").trim();
+  if (!meetingId) {
+    log("[copyMeetingId] 没有可复制的 meetingId");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(meetingId);
+    log("[copyMeetingId] copied", { meetingId });
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = meetingId;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    log("[copyMeetingId] copied (fallback)", { meetingId });
+  }
+}
+
 function setupUserIdInput() {
   const input = $("#userId");
   if (!input) return;
@@ -132,7 +170,17 @@ async function fetchJson(url) {
   } catch {
     throw new Error(`non-json response (status=${res.status}): ${text.slice(0, 200)}`);
   }
-  if (!res.ok || !json.ok) throw new Error(json.error || `http status=${res.status}`);
+  if (!res.ok || !json.ok) {
+    const extra = [];
+    if (json?.meetingCode) extra.push(`meetingCode=${json.meetingCode}`);
+    if (json?.userId) extra.push(`userId=${json.userId}`);
+    if (json?.scanned !== undefined) extra.push(`scanned=${json.scanned}`);
+    if (Array.isArray(json?.sampleCodes) && json.sampleCodes.length) {
+      extra.push(`sampleCodes=${json.sampleCodes.slice(0, 8).join(",")}`);
+    }
+    const suffix = extra.length ? ` (${extra.join(", ")})` : "";
+    throw new Error((json?.error || `http status=${res.status}`) + suffix);
+  }
   return json;
 }
 
@@ -402,6 +450,7 @@ async function doInit() {
   await initWx(cfg);
   inited = true;
   $("#btnCreate").disabled = false;
+  $("#btnResolveId").disabled = false;
   $("#btnJoin").disabled = false;
   log("[init] done");
 }
@@ -418,7 +467,7 @@ async function doCreateMeeting() {
 
     const maybeId = extractMeetingId(res);
     if (maybeId) {
-      $("#meetingId").value = maybeId;
+      $("#joinMeetingId").value = maybeId;
       log("[startMeeting/create] filled meetingId", { meetingId: maybeId });
     } else {
       log("[startMeeting/create] payload keys", Object.keys(res || {}));
@@ -430,29 +479,48 @@ async function doCreateMeeting() {
   }
 }
 
-async function doJoinMeeting() {
+async function doResolveMeetingId() {
   if (!inited) await doInit();
 
-  const rawValue = $("#meetingId").value.trim();
-  let meetingId = cleanMeetingInput(rawValue);
-  $("#meetingId").value = meetingId;
+  const rawValue = $("#meetingCode").value.trim();
+  const meetingCode = cleanMeetingInput(rawValue);
+  $("#meetingCode").value = meetingCode;
 
-  if (!meetingId) {
-    log("[startMeeting/join] 请输入 meetingId。");
+  if (!meetingCode) {
+    log("[resolveMeetingId] 请输入会议号（9位数字）。");
+    return;
+  }
+  if (!isLikelyMeetingCode(meetingCode)) {
+    log("[resolveMeetingId] 会议号格式不正确，请输入9位数字会议号。");
     return;
   }
 
+  log("[resolveMeetingId] 开始按会议号查询 meetingId...", { meetingCode });
+  try {
+    const meetingId = await resolveMeetingIdByCode(meetingCode);
+    if (!meetingId) throw new Error("resolve-id returned empty meetingId");
+    $("#joinMeetingId").value = meetingId;
+    log("[resolveMeetingId] success", { meetingCode, meetingId });
+    showMeetingIdModal(meetingId, meetingCode);
+  } catch (err) {
+    log("[resolveMeetingId] fail", err);
+    log("[resolveMeetingId] 提示：请确认 userId、应用可见范围和会议权限配置。");
+  }
+}
+
+async function doJoinMeeting() {
+  if (!inited) await doInit();
+
+  const meetingId = cleanMeetingInput($("#joinMeetingId").value.trim());
+  $("#joinMeetingId").value = meetingId;
+
+  if (!meetingId) {
+    log("[startMeeting/join] 请输入会议ID。");
+    return;
+  }
   if (isLikelyMeetingCode(meetingId)) {
-    log("[startMeeting/join] 检测到会议号（meeting_code），尝试通过后端解析 meetingId...");
-    try {
-      meetingId = await resolveMeetingIdByCode(meetingId);
-      if (!meetingId) throw new Error("resolve-id returned empty meetingId");
-      $("#meetingId").value = meetingId;
-      log("[startMeeting/join] resolved meetingId", { meetingId });
-    } catch (err) {
-      log("[startMeeting/join] 无法将会议号转换为 meetingId", err);
-      return;
-    }
+    log("[startMeeting/join] 请输入会议ID（非9位会议号）。请先点击「查询会议ID」。");
+    return;
   }
 
   const params = { meetingId };
@@ -473,8 +541,18 @@ $("#btnInit").addEventListener("click", () => {
 $("#btnCreate").addEventListener("click", () => {
   doCreateMeeting().catch((e) => log("[startMeeting/create] exception", e));
 });
+$("#btnResolveId").addEventListener("click", () => {
+  doResolveMeetingId().catch((e) => log("[resolveMeetingId] exception", e));
+});
 $("#btnJoin").addEventListener("click", () => {
   doJoinMeeting().catch((e) => log("[startMeeting/join] exception", e));
+});
+$("#btnCloseMeetingIdModal").addEventListener("click", hideMeetingIdModal);
+$("#btnCopyMeetingId").addEventListener("click", () => {
+  copyMeetingIdFromModal().catch((e) => log("[copyMeetingId] fail", e));
+});
+$("#meetingIdModal").addEventListener("click", (e) => {
+  if (e.target?.id === "meetingIdModal") hideMeetingIdModal();
 });
 
 setupUserIdInput();

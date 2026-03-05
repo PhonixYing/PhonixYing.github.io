@@ -21,12 +21,18 @@
 
         <div class="row">
           <button id="btnCreate" disabled>创建会议</button>
-          <button id="btnJoin" disabled>进入会议</button>
+          <button id="btnResolveId" disabled>查询会议ID</button>
         </div>
 
         <div class="row">
-          <label for="meetingId">会议ID（创建后自动填）</label>
-          <input id="meetingId" placeholder="meetingId，或粘贴 653-533-972 这种会议号自动转换" />
+          <label for="meetingCode">会议号（9位）</label>
+          <input id="meetingCode" placeholder="请输入会议号，例如 653-533-972" />
+        </div>
+
+        <div class="row">
+          <label for="joinMeetingId">会议ID</label>
+          <input id="joinMeetingId" placeholder="请输入正确的会议ID（非9位数字）" />
+          <button id="btnJoin" disabled>进入会议</button>
         </div>
 
         <div class="row">
@@ -40,6 +46,17 @@
         <pre id="log"></pre>
       </section>
     </main>
+
+    <div id="meetingIdModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="modal-card">
+        <h3>查询到会议ID</h3>
+        <pre id="meetingIdResult"></pre>
+        <div class="row">
+          <button id="btnCopyMeetingId">复制会议ID</button>
+          <button id="btnCloseMeetingIdModal">关闭</button>
+        </div>
+      </div>
+    </div>
 
     <script type="module" src="./main.js"></script>
   </body>
