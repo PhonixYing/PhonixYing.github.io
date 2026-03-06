@@ -101,11 +101,11 @@ function getManualUserId() {
   return ($("#userId")?.value || "").trim();
 }
 
-function showMeetingIdModal(meetingId, meetingCode) {
+function showMeetingIdModal(meetingId, infoLine = "") {
   const modal = $("#meetingIdModal");
   const result = $("#meetingIdResult");
   if (!modal || !result) return;
-  result.textContent = `meetingCode: ${meetingCode}\nmeetingId: ${meetingId}`;
+  result.textContent = infoLine ? `${infoLine}\nmeetingId: ${meetingId}` : `meetingId: ${meetingId}`;
   modal.classList.remove("hidden");
   modal.setAttribute("aria-hidden", "false");
 }
@@ -180,6 +180,31 @@ async function fetchJson(url) {
     }
     const suffix = extra.length ? ` (${extra.join(", ")})` : "";
     throw new Error((json?.error || `http status=${res.status}`) + suffix);
+  }
+  return json;
+}
+
+async function postJson(url, body) {
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify(body || {}),
+    });
+  } catch (e) {
+    throw new Error(`fetch failed: ${String(e?.message || e)}`);
+  }
+
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`non-json response (status=${res.status}): ${text.slice(0, 200)}`);
+  }
+  if (!res.ok || !json.ok) {
+    throw new Error(json?.error || `http status=${res.status}`);
   }
   return json;
 }
@@ -450,6 +475,7 @@ async function doInit() {
   await initWx(cfg);
   inited = true;
   $("#btnCreate").disabled = false;
+  $("#btnBackendCreate").disabled = false;
   $("#btnResolveId").disabled = false;
   $("#btnJoin").disabled = false;
   log("[init] done");
@@ -501,11 +527,52 @@ async function doResolveMeetingId() {
     if (!meetingId) throw new Error("resolve-id returned empty meetingId");
     $("#joinMeetingId").value = meetingId;
     log("[resolveMeetingId] success", { meetingCode, meetingId });
-    showMeetingIdModal(meetingId, meetingCode);
+    showMeetingIdModal(meetingId, `meetingCode: ${meetingCode}`);
   } catch (err) {
     log("[resolveMeetingId] fail", err);
     log("[resolveMeetingId] 提示：请确认 userId、应用可见范围和会议权限配置。");
   }
+}
+
+async function doBackendCreateMeeting() {
+  if (!inited) await doInit();
+
+  let userId = getManualUserId();
+  if (!userId) {
+    try {
+      userId = await getCurrentUserId();
+    } catch (err) {
+      log("[backendCreate] getContext failed, fallback to manual userId", err);
+      userId = getManualUserId();
+    }
+  }
+
+  if (!userId) {
+    log("[backendCreate] 缺少 userId。请先填写「企业微信 userId（可选）」输入框。");
+    return;
+  }
+
+  const nowText = new Date().toLocaleString();
+  const payload = {
+    adminUserId: userId,
+    title: `H5 Demo ${nowText}`,
+  };
+  log("[backendCreate] request payload", payload);
+
+  const full = apiUrl("/api/meeting/create");
+  const json = await postJson(full, payload);
+  const meetingId = String(json.meetingId || "").trim();
+  log("[backendCreate] success", {
+    meetingId,
+    accessTokenReady: json.accessTokenReady,
+    accessTokenPreview: json.accessTokenPreview,
+  });
+
+  if (!meetingId) {
+    throw new Error("backend create succeeded but meetingId is empty");
+  }
+  $("#joinMeetingId").value = meetingId;
+  showMeetingIdModal(meetingId, "source: 后端创建会议");
 }
 
 async function doJoinMeeting() {
@@ -543,6 +610,9 @@ $("#btnCreate").addEventListener("click", () => {
 });
 $("#btnResolveId").addEventListener("click", () => {
   doResolveMeetingId().catch((e) => log("[resolveMeetingId] exception", e));
+});
+$("#btnBackendCreate").addEventListener("click", () => {
+  doBackendCreateMeeting().catch((e) => log("[backendCreate] exception", e));
 });
 $("#btnJoin").addEventListener("click", () => {
   doJoinMeeting().catch((e) => log("[startMeeting/join] exception", e));
