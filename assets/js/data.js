@@ -157,8 +157,8 @@ var APPS = [
     category: "Games",
     platform: "Mac",
     website: "https://phonixying.github.io/NightfallTrials/",
-    store: null,
-    storeState: "coming",
-    icon: "assets/icons/nightfall-trials.svg"
+    store: "https://apps.apple.com/app/id6802349862",
+    storeState: "live",
+    icon: "assets/icons/nightfall-trials.png"
   }
 ];
