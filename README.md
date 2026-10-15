@@ -76,3 +76,30 @@ python3 -m http.server 8080
 ## Privacy
 
 This is a fully static site: no analytics, no tracking, no external requests except for loading the Montserrat font from Google Fonts. All product data points directly to Apple's official store listings and the apps' own websites.
+
+## Sitemaps & SEO
+
+`sitemap.xml` is a **sitemap index** that covers the hub site and every project site under this host:
+
+```text
+sitemap.xml                 -> sitemap index
+  sitemaps/main.xml         -> /, /wecom-meeting/
+  sitemaps/<slug>.xml       -> /AncientRead/, /AquaLog/, /PetLoss/, /IChingLifeGuid/, ...
+  /CharacterAssembly/sitemap.xml   (maintained by that repo)
+```
+
+Regenerate after adding pages or a new project site:
+
+```bash
+python3 tools/generate-sitemaps.py            # 只按本地文件生成
+python3 tools/generate-sitemaps.py --verify   # 生成时并发 HEAD 校验，剔除线上 404
+```
+
+The generator (`tools/generate-sitemaps.py`) reads the sibling project repositories (`../<repo>`, no
+modification), skips boilerplate pages (`api-examples`, `markdown-examples`, `404`, search-engine
+verification files) and build output (`node_modules`, `.cloudflare-output`), and assigns
+`priority`/`changefreq` by page type. To add a project site, append an entry to `SITES`; for one
+without a local clone, list its URLs in `MANUAL_SITES`.
+
+After pushing, submit `https://phonixying.github.io/sitemap.xml` once in Google Search Console
+(the `https://phonixying.github.io/` property already covers all project subpaths).
