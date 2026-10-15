@@ -4,7 +4,7 @@ name: Deploy static site to Pages
 
 on:
   push:
-    branches: ["main"]
+    branches: ["master"]
   workflow_dispatch:
 
 # 赋予 GITHUB_TOKEN 部署 Pages 所需的权限
