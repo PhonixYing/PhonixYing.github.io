@@ -19,7 +19,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 部署前先确认 index.html 的卡片/结构化数据与 assets/js/data.js 同步，
+  # 避免把过期内容发上线。本地修法：node tools/render-cards.js
+  verify:
+    name: index.html matches data.js
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Regenerate cards & structured data
+        run: node tools/render-cards.js
+
+      - name: Fail if index.html is out of date
+        run: |
+          if ! git diff --quiet -- index.html; then
+            echo "::error file=index.html::index.html 与 assets/js/data.js 不一致。请在本地运行 node tools/render-cards.js 并提交生成的 index.html。"
+            git --no-pager diff --stat -- index.html
+            git --no-pager diff -- index.html | head -60
+            exit 1
+          fi
+          echo "index.html 与 data.js 一致。"
+
   deploy:
+    needs: verify
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

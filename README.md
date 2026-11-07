@@ -10,13 +10,19 @@ A single-page, dependency-free static site (HTML + CSS + vanilla JS) that highli
 .
 ├── index.html            # Single-page site (nav / hero / featured / all-apps / footer)
 ├── README.md
+├── sitemap.xml           # Sitemap index (regenerate: tools/generate-sitemaps.py)
+├── tools
+│   ├── render-cards.js   # data.js -> 静态卡片 + JSON-LD in index.html
+│   └── generate-sitemaps.py
 └── assets
     ├── css/style.css      # Design system (dark neon-gradient + glassmorphism)
     ├── js/data.js         # App catalogue (APPS array) — edit here to add/update apps
-    ├── js/main.js         # Rendering, reveal animations, icon fallback
+    ├── js/main.js         # Progressive enhancement, reveal animations, icon fallback
     ├── icons/             # App icons (downloaded from App Store / official sites)
     ├── img/               # Store badges + OG social image
-    └── favicon.svg        # Brand favicon
+    ├── favicon.svg        # Brand favicon
+    ├── favicon-32.png     # PNG fallback (rendered from the SVG)
+    └── apple-touch-icon.png
 ```
 
 ## Managing the apps
@@ -25,7 +31,8 @@ All product data lives in `assets/js/data.js` in the `APPS` array. To add or edi
 
 1. Drop its icon into `assets/icons/` (PNG/SVG).
 2. Add a record to `APPS` with the fields below.
-3. Commit and push — GitHub Pages rebuilds automatically.
+3. Run `node tools/render-cards.js` to regenerate the static cards and JSON-LD in `index.html`.
+4. Commit and push — GitHub Pages rebuilds automatically.
 
 ```js
 {
@@ -42,6 +49,11 @@ All product data lives in `assets/js/data.js` in the `APPS` array. To add or edi
   featured: false                   // true to spotlight in the Featured section
 }
 ```
+
+The cards and JSON-LD stay inline in `index.html` so crawlers see the full app list without running
+JavaScript. CI enforces step 3: `.github/workflows/verify-cards.yml` runs on every pull request, and
+the `verify` job in `deploy.yml` runs before deployment — both regenerate the file and fail when the
+committed `index.html` is stale.
 
 ## Deploying to GitHub Pages
 
@@ -64,7 +76,7 @@ No `CNAME` is needed because the repository name is already the GitHub Pages dom
 
 ## Local development
 
-The site uses no build step. Open `index.html` directly, or serve it locally:
+The site uses no build step at serve time. Open `index.html` directly, or serve it locally:
 
 ```bash
 python3 -m http.server 8080

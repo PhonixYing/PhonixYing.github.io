@@ -134,17 +134,35 @@
     return card;
   }
 
+  /* 静态卡片里挂不了 onerror，这里补上图标兜底 */
+  function enhanceIcons() {
+    var imgs = document.querySelectorAll(".app-ico img[data-initial]");
+    Array.prototype.forEach.call(imgs, function (img) {
+      if (img.getAttribute("data-enhanced")) return;
+      img.setAttribute("data-enhanced", "1");
+      img.addEventListener("error", function () { fallbackIcon(img); });
+    });
+  }
+
   function mount() {
     var featuredWrap = document.getElementById("featuredGrid");
     var appWrap = document.getElementById("appGrid");
-    if (featuredWrap && appWrap) {
-      APPS.forEach(function (app, i) {
-        if (app.featured) featuredWrap.appendChild(cardMarkup(app, i, true));
-      });
-      APPS.forEach(function (app, i) {
-        appWrap.appendChild(cardMarkup(app, i, false));
-      });
+    if (!featuredWrap || !appWrap) return;
+
+    /* 卡片已由 tools/render-cards.js 静态写入 HTML（爬虫无需执行 JS 即可读到），
+       此时不再重复渲染，只补图标兜底。 */
+    if (featuredWrap.children.length || appWrap.children.length) {
+      enhanceIcons();
+      return;
     }
+
+    APPS.forEach(function (app, i) {
+      if (app.featured) featuredWrap.appendChild(cardMarkup(app, i, true));
+    });
+    APPS.forEach(function (app, i) {
+      appWrap.appendChild(cardMarkup(app, i, false));
+    });
+    enhanceIcons();
   }
 
   /* Reveal on scroll */

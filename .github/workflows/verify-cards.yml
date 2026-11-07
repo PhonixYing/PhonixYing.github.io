@@ -1,0 +1,36 @@
+# 校验 index.html 里的静态卡片 / JSON-LD 与 assets/js/data.js 是否同步
+# 触发：任何 pull request、以及手动运行（push 到 master 的校验由 deploy.yml 负责）
+name: Verify generated cards
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: index.html matches data.js
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Regenerate cards & structured data
+        run: node tools/render-cards.js
+
+      - name: Fail if index.html is out of date
+        run: |
+          if ! git diff --quiet -- index.html; then
+            echo "::error file=index.html::index.html 与 assets/js/data.js 不一致。请在本地运行 node tools/render-cards.js 并提交生成的 index.html。"
+            git --no-pager diff --stat -- index.html
+            git --no-pager diff -- index.html | head -60
+            exit 1
+          fi
+          echo "index.html 与 data.js 一致。"
