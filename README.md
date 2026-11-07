@@ -84,9 +84,13 @@ This is a fully static site: no analytics, no tracking, no external requests exc
 ```text
 sitemap.xml                 -> sitemap index
   sitemaps/main.xml         -> /, /wecom-meeting/
-  sitemaps/<slug>.xml       -> /AncientRead/, /AquaLog/, /PetLoss/, /IChingLifeGuid/, ...
+  sitemaps/<slug>.xml       -> /AncientRead/, /IChingLifeGuid/, ...
   /CharacterAssembly/sitemap.xml   (maintained by that repo)
 ```
+
+Sites that live on their own domain are **not** listed here, because a sitemap may only contain URLs
+of its own host: PetLoss (`https://petloss.app/sitemap.xml`) and AquaLog
+(`https://fishtankdiary.com/sitemap.xml`) maintain and submit their own sitemaps.
 
 Regenerate after adding pages or a new project site:
 
@@ -102,4 +106,6 @@ verification files) and build output (`node_modules`, `.cloudflare-output`), and
 without a local clone, list its URLs in `MANUAL_SITES`.
 
 After pushing, submit `https://phonixying.github.io/sitemap.xml` once in Google Search Console
-(the `https://phonixying.github.io/` property already covers all project subpaths).
+(the `https://phonixying.github.io/` property already covers all project subpaths). Sites on their
+own domain need their own Search Console property and their own sitemap submitted there
+(`https://petloss.app/sitemap.xml`, `https://fishtankdiary.com/sitemap.xml`).

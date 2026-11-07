@@ -48,7 +48,7 @@ var APPS = [
     description: "Write letters to your companion, craft memorial cards and cinematic films, and relive memories on a timeline — with soft reminders on the hard days. Everything stays on-device, private and offline.",
     category: "Lifestyle",
     platform: "iOS",
-    website: "https://phonixying.github.io/PetLoss/",
+    website: "https://petloss.app/",
     store: "https://apps.apple.com/app/id6757967412",
     storeState: "live",
     icon: "assets/icons/petloss.png"
@@ -84,7 +84,7 @@ var APPS = [
     description: "Log water chemistry, feeding and filter care for your tank, completely offline and without an account. One unlock adds multi-tank support, trend charts and CSV export.",
     category: "Utilities",
     platform: "iOS",
-    website: "https://phonixying.github.io/AquaLog/",
+    website: "https://fishtankdiary.com/",
     store: "https://apps.apple.com/app/id6758230854",
     storeState: "live",
     icon: "assets/icons/aqualog.png"

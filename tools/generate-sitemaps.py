@@ -51,11 +51,11 @@ MAIN_PAGES = [
 ]
 
 # 子站配置：slug, URL 前缀, 本地仓库目录, 发布子目录（None 表示仓库根目录）
+# 注意：已迁到自有域名的站点（PetLoss -> https://petloss.app/、AquaLog -> https://fishtankdiary.com/）
+# 不在此列出——它们由各自域名/仓库维护 sitemap，跨域收录无效。
 SITES = [
     ("ancientread", "/AncientRead/", "AncientRead", None),
-    ("aqualog", "/AquaLog/", "AquaLog", None),
     ("fieldreportpro", "/FieldReportPro/", "FieldReportPro", None),
-    ("petloss", "/PetLoss/", "PetLoss", None),
     ("ichinglifeguid", "/IChingLifeGuid/", "IChingLifeGuid", None),
     ("warrantykeeper", "/WarrantyKeeper/", "WarrantyKeeper", None),
     ("operapuzzle", "/Operapuzzle/", "Operapuzzle", None),
